@@ -53,6 +53,9 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: android-actions/setup-android@v3
+        with:
+          # El paquete tools ya no se distribuye; instalar solo platform-tools.
+          packages: platform-tools
       - name: Preparar SDK
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - run: npm --prefix frontend ci
