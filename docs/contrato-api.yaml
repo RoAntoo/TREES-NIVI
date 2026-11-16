@@ -1,0 +1,758 @@
+openapi: 3.0.3
+info:
+  title: NIVI Lectura
+  version: 0.4.2
+  description: >-
+    Biblioteca única por instalación. Fechas UTC del servidor. El perfil predeterminado
+    local ofrece acceso directo sin cuenta y exige escuchar en 127.0.0.1; Android usa
+    ADB reverse. La app no tiene login. El perfil alternativo seguro conserva JWT HS256
+    para clientes técnicos; exige Bearer en todos los endpoints excepto POST acceso.
+    Los registros y las altas usan idOperacion global: repetir contenido idéntico devuelve
+    el resultado original con 200, antes de comprobar versión. Distinto contenido devuelve 409.
+    Una operación de un libro eliminado devuelve 409 y nunca lo restaura.
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Desarrollo local; usar HTTPS fuera del entorno local.
+security:
+  - {}
+tags:
+  - name: Acceso
+  - name: Biblioteca
+  - name: Catálogo
+paths:
+  /acceso:
+    post:
+      tags: [Acceso]
+      operationId: acceder
+      summary: Obtener una sesión de la cuenta configurada (solo perfil seguro)
+      description: No existe en el perfil local predeterminado. La app usa la biblioteca directamente y no llama este endpoint.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Acceso'
+      responses:
+        '200':
+          description: Sesión emitida; Cache-Control no-store.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sesion'
+        '400':
+          $ref: '#/components/responses/EntradaInvalida'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '429':
+          $ref: '#/components/responses/Limite'
+        '500':
+          $ref: '#/components/responses/Interno'
+  /libros:
+    get:
+      tags: [Biblioteca]
+      operationId: listarLibros
+      summary: Consultar biblioteca, ordenada por creación e identificador descendentes
+      parameters:
+        - $ref: '#/components/parameters/Pagina'
+        - $ref: '#/components/parameters/Tamano'
+        - $ref: '#/components/parameters/Consulta'
+        - in: query
+          name: estado
+          schema:
+            $ref: '#/components/schemas/EstadoLectura'
+      responses:
+        '200':
+          description: Colección, posiblemente vacía; q busca título o autor sin distinguir mayúsculas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaLibros'
+        '400':
+          $ref: '#/components/responses/EntradaInvalida'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '429':
+          $ref: '#/components/responses/Limite'
+        '500':
+          $ref: '#/components/responses/Interno'
+    post:
+      tags: [Biblioteca]
+      operationId: agregarLibro
+      summary: Guardar metadatos confirmados como libro pendiente en página cero
+      description: >-
+        ISBN-10/13 equivalentes y edición externa únicos. El ISBN guardado conserva
+        el formato normalizado confirmado y la unicidad usa una clave ISBN-13 canónica.
+        Coincidir solo en título y autores produce una advertencia.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Alta'
+            examples:
+              manual:
+                value:
+                  idOperacion: 9425c038-255b-4db0-a4e6-3af4a334f26a
+                  origen: MANUAL
+                  metadatos:
+                    titulo: Libro de ejemplo
+                    autores: []
+              importada:
+                value:
+                  idOperacion: 7cbd090c-712a-4b70-a73f-cf45764c6115
+                  origen: OPEN_LIBRARY
+                  metadatos:
+                    titulo: Fantastic Mr. Fox
+                    autores: [Roald Dahl]
+                    isbn: '9780140328721'
+                    idEdicionExterna: OL7353617M
+                    idObraExterna: OL45804W
+                    totalPaginas: 96
+      responses:
+        '201':
+          description: Libro creado.
+          headers:
+            Location:
+              schema: {type: string, example: /api/v1/libros/9425c038-255b-4db0-a4e6-3af4a334f26a}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Escritura'
+        '200':
+          description: Repetición idéntica, con el resultado original y Location.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Escritura'
+        '400':
+          $ref: '#/components/responses/EntradaInvalida'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '409':
+          $ref: '#/components/responses/Conflicto'
+        '429':
+          $ref: '#/components/responses/Limite'
+        '500':
+          $ref: '#/components/responses/Interno'
+  /libros/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdLibro'
+    get:
+      tags: [Biblioteca]
+      operationId: detalleLibro
+      summary: Consultar libro y último registro para retomar lectura
+      responses:
+        '200':
+          description: Detalle; ultimoRegistro es nulo cuando aún no hay avances.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Detalle'
+        '400':
+          $ref: '#/components/responses/EntradaInvalida'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          $ref: '#/components/responses/Inexistente'
+        '429':
+          $ref: '#/components/responses/Limite'
+        '500':
+          $ref: '#/components/responses/Interno'
+    delete:
+      tags: [Biblioteca]
+      operationId: eliminarLibro
+      summary: Eliminar libro, historial y copias de notas en operaciones atómicamente
+      parameters:
+        - in: query
+          name: version
+          required: true
+          schema: {type: integer, format: int64, minimum: 0}
+      responses:
+        '204': {description: Eliminado.}
+        '400':
+          $ref: '#/components/responses/EntradaInvalida'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          $ref: '#/components/responses/Inexistente'
+        '409':
+          $ref: '#/components/responses/Conflicto'
+        '429':
+          $ref: '#/components/responses/Limite'
+        '500':
+          $ref: '#/components/responses/Interno'
+  /libros/{id}/metadatos:
+    parameters:
+      - $ref: '#/components/parameters/IdLibro'
+    put:
+      tags: [Biblioteca]
+      operationId: editarMetadatos
+      summary: Reemplazar metadatos locales sin cambiar automáticamente el estado
+      description: Campos opcionales omitidos se limpian. Un total inferior a la posición actual se rechaza.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Edicion'
+      responses:
+        '200':
+          $ref: '#/components/responses/LibroActualizado'
+        '400':
+          $ref: '#/components/responses/EntradaInvalida'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          $ref: '#/components/responses/Inexistente'
+        '409':
+          $ref: '#/components/responses/Conflicto'
+        '429':
+          $ref: '#/components/responses/Limite'
+        '500':
+          $ref: '#/components/responses/Interno'
+  /libros/{id}/estado:
+    parameters:
+      - $ref: '#/components/parameters/IdLibro'
+    put:
+      tags: [Biblioteca]
+      operationId: cambiarEstado
+      summary: Iniciar, pausar, retomar, terminar o reabrir una lectura
+      description: >-
+        PENDIENTE admite LEYENDO o TERMINADO; LEYENDO admite PAUSADO o TERMINADO;
+        PAUSADO admite LEYENDO o TERMINADO; TERMINADO admite LEYENDO.
+        El mismo estado conserva versión y fecha. No se vuelve a PENDIENTE.
+        Terminar antes del total o sin total requiere confirmarFinalizacion true.
+        Reabrir limpia terminadoEn y conserva posición e historial.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CambioEstado'
+            examples:
+              iniciar: {value: {versionLibro: 0, estado: LEYENDO}}
+              pausar: {value: {versionLibro: 1, estado: PAUSADO}}
+              finalizar: {value: {versionLibro: 2, estado: TERMINADO, confirmarFinalizacion: true}}
+              reabrir: {value: {versionLibro: 3, estado: LEYENDO}}
+      responses:
+        '200':
+          $ref: '#/components/responses/LibroActualizado'
+        '400':
+          $ref: '#/components/responses/EntradaInvalida'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          $ref: '#/components/responses/Inexistente'
+        '409':
+          $ref: '#/components/responses/Conflicto'
+        '429':
+          $ref: '#/components/responses/Limite'
+        '500':
+          $ref: '#/components/responses/Interno'
+  /libros/{id}/registros:
+    parameters:
+      - $ref: '#/components/parameters/IdLibro'
+    get:
+      tags: [Biblioteca]
+      operationId: historialLectura
+      summary: Historial inmutable por fecha descendente y desempate por UUID descendente
+      parameters:
+        - $ref: '#/components/parameters/Pagina'
+        - $ref: '#/components/parameters/Tamano'
+      responses:
+        '200':
+          description: Historial paginado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaRegistros'
+        '400':
+          $ref: '#/components/responses/EntradaInvalida'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          $ref: '#/components/responses/Inexistente'
+        '429':
+          $ref: '#/components/responses/Limite'
+        '500':
+          $ref: '#/components/responses/Interno'
+    post:
+      tags: [Biblioteca]
+      operationId: registrarAvance
+      summary: Registrar posición y actualizar libro en una única transacción
+      description: >-
+        Solo LEYENDO admite avances. Se permiten correcciones hacia atrás, conservando historial.
+        Al alcanzar el total conocido, pasa a TERMINADO con fecha del servidor. Sin total,
+        no se calcula porcentaje. La interfaz debe confirmar correcciones y reutilizar
+        idOperacion y contenido al reintentar una respuesta perdida.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Avance'
+            example:
+              idOperacion: 9425c038-255b-4db0-a4e6-3af4a334f26a
+              versionLibro: 3
+              paginaActual: 94
+              nota: Apareció la hermana de Martín.
+      responses:
+        '201':
+          description: Registro creado junto con el libro actualizado y su nueva versión.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Escritura'
+        '200':
+          description: Repetición idéntica; devuelve el registro y libro originales, no la versión presente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Escritura'
+        '400':
+          $ref: '#/components/responses/EntradaInvalida'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          $ref: '#/components/responses/Inexistente'
+        '409':
+          $ref: '#/components/responses/Conflicto'
+        '429':
+          $ref: '#/components/responses/Limite'
+        '500':
+          $ref: '#/components/responses/Interno'
+  /resumen:
+    get:
+      tags: [Biblioteca]
+      operationId: resumenInicio
+      summary: Conteos por estado y hasta tres libros LEYENDO actualizados más recientemente
+      responses:
+        '200':
+          description: Conteos calculados en base y lecturas activas acotadas, con último registro.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resumen'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '429':
+          $ref: '#/components/responses/Limite'
+        '500':
+          $ref: '#/components/responses/Interno'
+  /catalogo/busqueda:
+    get:
+      tags: [Catálogo]
+      operationId: buscarCatalogo
+      summary: Buscar obras de Open Library sin seleccionar una edición arbitraria
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 200}
+        - $ref: '#/components/parameters/Pagina'
+        - $ref: '#/components/parameters/Tamano'
+      responses:
+        '200':
+          description: Resultados por clave del proveedor; la ausencia es una lista vacía.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaCatalogo'
+        '400':
+          $ref: '#/components/responses/EntradaInvalida'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '429':
+          $ref: '#/components/responses/Limite'
+        '503':
+          $ref: '#/components/responses/CatalogoNoDisponible'
+        '504':
+          $ref: '#/components/responses/CatalogoTiempoAgotado'
+        '500':
+          $ref: '#/components/responses/Interno'
+  /catalogo/isbn/{isbn}:
+    get:
+      tags: [Catálogo]
+      operationId: identificarIsbn
+      summary: Consultar la edición de un ISBN válido, manteniendo el ISBN consultado
+      parameters:
+        - in: path
+          name: isbn
+          required: true
+          description: Admite espacios y guiones; ISBN-10 con X final o ISBN-13 978/979, con checksum válido.
+          schema: {type: string, maxLength: 40}
+      responses:
+        '200':
+          description: Metadatos parciales confirmables; autores, páginas y portada pueden faltar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Candidato'
+        '400':
+          $ref: '#/components/responses/EntradaInvalida'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          $ref: '#/components/responses/Inexistente'
+        '429':
+          $ref: '#/components/responses/Limite'
+        '503':
+          $ref: '#/components/responses/CatalogoNoDisponible'
+        '504':
+          $ref: '#/components/responses/CatalogoTiempoAgotado'
+        '500':
+          $ref: '#/components/responses/Interno'
+  /catalogo/ediciones/{id}:
+    get:
+      tags: [Catálogo]
+      operationId: consultarEdicion
+      summary: Recuperar una edición concreta y sus autores, también si no informa ISBN
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, pattern: '^OL[0-9]+M$'}
+      responses:
+        '200':
+          description: Páginas e ISBN exclusivamente de la edición indicada; autores resueltos con alternativa de obra.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Candidato'}
+        '400':
+          $ref: '#/components/responses/EntradaInvalida'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          $ref: '#/components/responses/Inexistente'
+        '429':
+          $ref: '#/components/responses/Limite'
+        '503':
+          $ref: '#/components/responses/CatalogoNoDisponible'
+        '504':
+          $ref: '#/components/responses/CatalogoTiempoAgotado'
+  /catalogo/obras/{id}/ediciones:
+    get:
+      tags: [Catálogo]
+      operationId: listarEdiciones
+      summary: Listar ediciones para elegir un ejemplar sin consultar autores por cada fila
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string, pattern: '^OL[0-9]+W$'}
+        - $ref: '#/components/parameters/Pagina'
+        - in: query
+          name: tamano
+          schema: {type: integer, minimum: 1, maximum: 50, default: 10}
+      responses:
+        '200':
+          description: Lista paginada; los autores se completan al consultar la edición seleccionada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [elementos, pagina, tamano, totalElementos, haySiguiente]
+                properties:
+                  elementos:
+                    type: array
+                    items:
+                      type: object
+                      required: [libro, idiomas, editorial, publicacion]
+                      properties:
+                        libro: {$ref: '#/components/schemas/Candidato'}
+                        idiomas: {type: array, items: {type: string}}
+                        editorial: {type: string, nullable: true}
+                        publicacion: {type: string, nullable: true}
+                  pagina: {type: integer}
+                  tamano: {type: integer}
+                  totalElementos: {type: integer, format: int64}
+                  haySiguiente: {type: boolean}
+        '400':
+          $ref: '#/components/responses/EntradaInvalida'
+        '401':
+          $ref: '#/components/responses/SinSesion'
+        '404':
+          $ref: '#/components/responses/Inexistente'
+        '429':
+          $ref: '#/components/responses/Limite'
+        '503':
+          $ref: '#/components/responses/CatalogoNoDisponible'
+        '504':
+          $ref: '#/components/responses/CatalogoTiempoAgotado'
+components:
+  securitySchemes:
+    sesion: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    IdLibro:
+      in: path
+      name: id
+      required: true
+      schema: {type: string, format: uuid}
+    Pagina:
+      in: query
+      name: pagina
+      schema: {type: integer, minimum: 1, maximum: 100000, default: 1}
+    Tamano:
+      in: query
+      name: tamano
+      schema: {type: integer, minimum: 1, maximum: 50, default: 20}
+    Consulta:
+      in: query
+      name: q
+      schema: {type: string, maxLength: 200, default: ''}
+  responses:
+    EntradaInvalida:
+      description: Entrada inválida, ISBN incorrecto, transición no admitida o confirmación faltante.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    SinSesion:
+      description: SESION_REQUERIDA, SESION_INVALIDA o CREDENCIALES_INCORRECTAS.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Inexistente:
+      description: LIBRO_INEXISTENTE o ISBN_INEXISTENTE.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflicto:
+      description: >-
+        EDICION_DUPLICADA, VERSION_DESACTUALIZADA, OPERACION_REUTILIZADA,
+        OPERACION_ELIMINADA o CONFLICTO_PERSISTENCIA. Ante versión vieja, consultar
+        GET /libros/{id}, revisar y confirmar de nuevo; nunca sobrescribir silenciosamente.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Limite:
+      description: Límite propio; 10 accesos o 120 solicitudes de negocio por IP/minuto, o espera de catálogo excesiva.
+      headers:
+        Retry-After: {schema: {type: integer, minimum: 0}, description: Segundos recomendados de espera.}
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Interno:
+      description: ERROR_INTERNO sin SQL, trazas ni datos sensibles; idSolicitud permite diagnóstico.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    CatalogoNoDisponible:
+      description: Proveedor caído, limitado o respuesta no utilizable; ofrecer alta manual.
+      headers:
+        Retry-After: {schema: {type: integer, minimum: 0}}
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    CatalogoTiempoAgotado:
+      description: Se agotó el tiempo externo; ofrecer alta manual.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    LibroActualizado:
+      description: Libro actualizado con nueva versión, o sin cambios si el estado ya coincidía.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Libro'
+  schemas:
+    EstadoLectura: {type: string, enum: [PENDIENTE, LEYENDO, PAUSADO, TERMINADO]}
+    OrigenLibro: {type: string, enum: [MANUAL, OPEN_LIBRARY]}
+    Acceso:
+      type: object
+      additionalProperties: false
+      required: [usuario, contrasena]
+      properties:
+        usuario: {type: string, minLength: 1, maxLength: 100}
+        contrasena: {type: string, minLength: 1, maxLength: 72, format: password, writeOnly: true}
+    Sesion:
+      type: object
+      required: [token, venceEn, tipo]
+      properties:
+        token: {type: string}
+        venceEn: {type: string, format: date-time}
+        tipo: {type: string, enum: [Bearer]}
+    Metadatos:
+      type: object
+      required: [titulo]
+      properties:
+        titulo: {type: string, minLength: 1, maxLength: 255, description: Obligatorio después de recortar espacios.}
+        autores:
+          type: array
+          maxItems: 10
+          items: {type: string, minLength: 1, maxLength: 150}
+          description: Omitido o nulo se normaliza a una lista vacía.
+          nullable: true
+        isbn: {type: string, maxLength: 40, nullable: true, description: Se normalizan guiones y espacios y se valida checksum.}
+        idEdicionExterna: {type: string, pattern: '^OL[0-9]+M$', maxLength: 40, nullable: true}
+        idObraExterna: {type: string, pattern: '^OL[0-9]+W$', maxLength: 40, nullable: true}
+        urlPortada: {type: string, format: uri, maxLength: 500, nullable: true, description: Solo HTTPS de covers.openlibrary.org sin usuario ni puerto explícito.}
+        totalPaginas: {type: integer, minimum: 1, maximum: 100000, nullable: true}
+    Alta:
+      type: object
+      additionalProperties: false
+      required: [idOperacion, metadatos, origen]
+      properties:
+        idOperacion: {type: string, format: uuid}
+        metadatos:
+          $ref: '#/components/schemas/Metadatos'
+        origen:
+          $ref: '#/components/schemas/OrigenLibro'
+    Edicion:
+      type: object
+      additionalProperties: false
+      required: [versionLibro, metadatos]
+      properties:
+        versionLibro: {type: integer, format: int64, minimum: 0}
+        metadatos:
+          $ref: '#/components/schemas/Metadatos'
+    CambioEstado:
+      type: object
+      additionalProperties: false
+      required: [versionLibro, estado]
+      properties:
+        versionLibro: {type: integer, format: int64, minimum: 0}
+        estado:
+          $ref: '#/components/schemas/EstadoLectura'
+        confirmarFinalizacion: {type: boolean, default: false}
+    Avance:
+      type: object
+      additionalProperties: false
+      required: [idOperacion, versionLibro, paginaActual]
+      properties:
+        idOperacion: {type: string, format: uuid}
+        versionLibro: {type: integer, format: int64, minimum: 0}
+        paginaActual: {type: integer, minimum: 0, maximum: 2147483647}
+        nota: {type: string, maxLength: 2000, nullable: true, description: Texto plano; vacío se normaliza a nulo.}
+    Libro:
+      allOf:
+        - $ref: '#/components/schemas/Metadatos'
+        - type: object
+          required: [id, paginaActual, estado, origen, version, creadoEn, actualizadoEn, porcentaje]
+          properties:
+            id: {type: string, format: uuid}
+            paginaActual: {type: integer, minimum: 0}
+            estado:
+              $ref: '#/components/schemas/EstadoLectura'
+            origen:
+              $ref: '#/components/schemas/OrigenLibro'
+            version: {type: integer, format: int64, minimum: 0}
+            creadoEn: {type: string, format: date-time}
+            actualizadoEn: {type: string, format: date-time}
+            terminadoEn: {type: string, format: date-time, nullable: true}
+            porcentaje: {type: number, format: double, minimum: 0, maximum: 100, nullable: true, description: Nulo sin total; no se fuerza a 100 al finalizar anticipadamente.}
+    Registro:
+      type: object
+      nullable: true
+      required: [id, libroId, paginaAnterior, paginaActual, creadoEn, idOperacion]
+      properties:
+        id: {type: string, format: uuid}
+        libroId: {type: string, format: uuid}
+        paginaAnterior: {type: integer, minimum: 0}
+        paginaActual: {type: integer, minimum: 0}
+        nota: {type: string, maxLength: 2000, nullable: true}
+        creadoEn: {type: string, format: date-time}
+        idOperacion: {type: string, format: uuid}
+    Detalle:
+      type: object
+      required: [libro, ultimoRegistro]
+      properties:
+        libro:
+          $ref: '#/components/schemas/Libro'
+        ultimoRegistro:
+          $ref: '#/components/schemas/Registro'
+    Escritura:
+      type: object
+      required: [libro, registro, advertencias]
+      properties:
+        libro:
+          $ref: '#/components/schemas/Libro'
+        registro:
+          $ref: '#/components/schemas/Registro'
+        advertencias: {type: array, items: {type: string}}
+    Paginacion:
+      type: object
+      required: [pagina, tamano, totalElementos, totalPaginas]
+      properties:
+        pagina: {type: integer, minimum: 1, maximum: 100000}
+        tamano: {type: integer, minimum: 1, maximum: 50}
+        totalElementos: {type: integer, format: int64, minimum: 0}
+        totalPaginas: {type: integer, minimum: 0}
+    PaginaLibros:
+      allOf:
+        - $ref: '#/components/schemas/Paginacion'
+        - type: object
+          required: [elementos]
+          properties:
+            elementos:
+              type: array
+              items:
+                $ref: '#/components/schemas/Libro'
+    PaginaRegistros:
+      allOf:
+        - $ref: '#/components/schemas/Paginacion'
+        - type: object
+          required: [elementos]
+          properties:
+            elementos:
+              type: array
+              items:
+                $ref: '#/components/schemas/Registro'
+    Resumen:
+      type: object
+      required: [conteos, lecturasActivas]
+      properties:
+        conteos:
+          type: object
+          required: [PENDIENTE, LEYENDO, PAUSADO, TERMINADO]
+          properties:
+            PENDIENTE: {type: integer, format: int64, minimum: 0}
+            LEYENDO: {type: integer, format: int64, minimum: 0}
+            PAUSADO: {type: integer, format: int64, minimum: 0}
+            TERMINADO: {type: integer, format: int64, minimum: 0}
+        lecturasActivas:
+          type: array
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/Detalle'
+    Candidato:
+      allOf:
+        - $ref: '#/components/schemas/Metadatos'
+        - type: object
+          required: [enlaceFuente]
+          properties:
+            enlaceFuente: {type: string, format: uri, description: Atribuir y enlazar a Open Library.}
+    PaginaCatalogo:
+      type: object
+      required: [elementos, pagina, tamano, totalElementos, totalEstimado, haySiguiente]
+      properties:
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/Candidato'
+        pagina: {type: integer, minimum: 1, maximum: 100000}
+        tamano: {type: integer, minimum: 1, maximum: 50}
+        totalElementos: {type: integer, format: int64, minimum: 0}
+        totalEstimado: {type: boolean, description: Verdadero cuando el proveedor no garantiza un total exacto.}
+        haySiguiente: {type: boolean}
+    Error:
+      type: object
+      required: [codigo, mensaje, campos, idSolicitud]
+      properties:
+        codigo: {type: string}
+        mensaje: {type: string}
+        campos: {type: object, additionalProperties: {type: string}}
+        idSolicitud: {type: string, format: uuid, description: También disponible en X-Request-Id.}
+      example:
+        codigo: PAGINA_SUPERA_TOTAL
+        mensaje: La página actual no puede superar el total del libro.
+        campos: {paginaActual: La página actual no puede superar el total del libro.}
+        idSolicitud: 9425c038-255b-4db0-a4e6-3af4a334f26a

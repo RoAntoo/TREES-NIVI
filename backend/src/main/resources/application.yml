@@ -1,0 +1,45 @@
+spring:
+  profiles:
+    default: local
+  application:
+    name: nivi-lectura
+  datasource:
+    url: ${DB_URL:jdbc:h2:file:./datos/nivi-lectura;DB_CLOSE_ON_EXIT=FALSE}
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+      accept-float-as-int: false
+    mapper:
+      allow-coercion-of-scalars: false
+server:
+  port: ${PORT:8080}
+  error:
+    include-message: never
+    include-stacktrace: never
+nivi:
+  acceso:
+    usuario: ${AUTH_USERNAME:}
+    contrasena: ${AUTH_PASSWORD:}
+    secreto: ${AUTH_JWT_SECRET:}
+    duracion: ${AUTH_JWT_DURATION:PT2H}
+  cors:
+    origenes: ${CORS_ALLOWED_ORIGINS:http://localhost:8100,http://localhost:4200,http://localhost,https://localhost,capacitor://localhost}
+  catalogo:
+    base: https://openlibrary.org
+    identificacion: ${OPEN_LIBRARY_USER_AGENT:}
+    conexion: ${OPEN_LIBRARY_CONNECT_TIMEOUT:PT2S}
+    lectura: ${OPEN_LIBRARY_READ_TIMEOUT:PT3S}
+    presupuesto: ${OPEN_LIBRARY_BUDGET:PT10S}
+    intervalo: ${OPEN_LIBRARY_INTERVAL:PT1S}
+    cache-entradas: ${OPEN_LIBRARY_CACHE_ENTRIES:500}
+    cache-duracion: ${OPEN_LIBRARY_CACHE_TTL:PT15M}
+    cache-ausencias: ${OPEN_LIBRARY_NEGATIVE_TTL:PT30S}
+logging:
+  level:
+    org.springframework.security: WARN

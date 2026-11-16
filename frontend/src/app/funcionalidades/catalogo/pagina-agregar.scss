@@ -1,0 +1,19 @@
+.agregar { max-width: 920px; }
+.selector-ediciones { border: 1px solid var(--nivi-borde); border-radius: 12px; padding: 18px; margin: 22px 0; }.selector-ediciones summary { cursor: pointer; font-weight: 600; font-size: 14px; }.opcion-edicion { padding: 18px 0; border-bottom: 1px solid var(--nivi-borde); }.opcion-edicion h3 { font: 400 21px var(--nivi-serif); margin: 0 0 10px; }.opcion-edicion p { font-size: 12px; line-height: 1.8; color: var(--nivi-secundario); }
+.escanear-libro { padding: 22px; border-radius: 14px; background: var(--nivi-suave); margin-bottom: 26px; }.escanear-libro h2 { font: 400 24px var(--nivi-serif); margin: 0 0 12px; }.escanear-libro p { font-size: 13px; line-height: 1.8; color: var(--nivi-secundario); }
+ion-segment { max-width: 580px; margin-bottom: 28px; --background: var(--nivi-suave); border-radius: 12px; }
+ion-segment-button { text-transform: none; letter-spacing: .1px; --color: var(--nivi-secundario); --color-checked: var(--ion-color-primary); }
+.busqueda-catalogo { display: flex; gap: 14px; align-items: center; margin: 20px 0; }
+ion-input { flex: 1; --border-radius: 10px; --border-color: var(--nivi-borde); --padding-start: 16px; font-size: 14px; min-height: 62px; }
+ion-button { min-height: 46px; }
+.confirmacion-libro { border: 1px solid var(--nivi-borde); border-radius: 18px; padding: 30px; background: var(--nivi-superficie); }
+.encabezado-formulario { display: flex; justify-content: space-between; gap: 15px; align-items: center; }
+h2 { font: 400 28px/1.3 var(--nivi-serif); margin: 12px 0; }
+.ayuda-confirmacion { font-size: 13px; line-height: 1.8; color: var(--nivi-secundario); margin-bottom: 28px; }
+.fuente { font-size: 11px; color: var(--nivi-secundario); line-height: 1.8; }.fuente a { color: var(--ion-color-primary); }
+.resultados-catalogo { display: grid; gap: 16px; margin-top: 28px; }
+.resultado-catalogo { display: flex; gap: 22px; padding: 24px; border: 1px solid var(--nivi-borde); background: var(--nivi-superficie); border-radius: 14px; }
+.resultado-catalogo nivi-portada { width: 74px; flex-shrink: 0; align-self: start; }
+.resultado-catalogo h2 { font-size: 24px; margin-top: 0; }.resultado-catalogo p { font-size: 12px; color: var(--nivi-secundario); line-height: 1.7; }
+.resultado-catalogo ion-button { margin-left: 0; }
+@media(max-width:540px) { .busqueda-catalogo { display: grid; }.busqueda-catalogo ion-button { margin: 0; }.confirmacion-libro { padding: 22px 18px; }.resultado-catalogo { padding: 18px; gap: 16px; }.resultado-catalogo nivi-portada { width: 60px; } }

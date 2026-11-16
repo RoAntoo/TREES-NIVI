@@ -1,0 +1,65 @@
+<ion-header class="ion-no-border"><ion-toolbar><ion-buttons slot="start"><ion-back-button defaultHref="/app/biblioteca" text="Biblioteca" /></ion-buttons><ion-title>Tu lectura</ion-title></ion-toolbar></ion-header>
+<ion-content>
+  <ion-refresher slot="fixed" (ionRefresh)="refrescar($event)"><ion-refresher-content pullingText="Actualizar libro" refreshingText="Consultando tu lectura" /></ion-refresher>
+  <main class="pagina detalle"><nivi-aviso-copia />
+    @if (consulta.error(); as error) { <nivi-estado-vista tipo="error" [titulo]="error.estado === 404 ? 'Este libro ya no está en tu biblioteca' : 'No pudimos actualizar el libro'" [descripcion]="error.mensaje" (reintentar)="cargar()" /> }
+    @if (mensaje()) { <p class="aviso-sesion" role="status">{{ mensaje() }}</p> }
+    @if (errorOperacion(); as error) { <p class="error-operacion" role="alert">{{ error.mensaje }}</p> }
+    @if (consulta.datos(); as detalle) {
+      <section class="cabecera-libro">
+        <nivi-portada [titulo]="detalle.libro.titulo" [url]="detalle.libro.urlPortada" />
+        <div class="metadatos-libro"><nivi-estado-libro [estado]="detalle.libro.estado" /><h1>{{ detalle.libro.titulo }}</h1><p class="autores">{{ detalle.libro.autores.join(', ') || 'Autor sin informar' }}</p>
+          @if (detalle.libro.isbn) { <p class="isbn">ISBN {{ detalle.libro.isbn }}</p> }
+          @if (detalle.libro.origen === 'OPEN_LIBRARY') {
+            <p class="isbn">Metadatos de <a [href]="'https://openlibrary.org/' + (detalle.libro.idEdicionExterna ? 'books/' + detalle.libro.idEdicionExterna : detalle.libro.idObraExterna ? 'works/' + detalle.libro.idObraExterna : '')" target="_blank" rel="noopener noreferrer">Open Library</a>, confirmados para tu ejemplar.</p>
+          }
+          <nivi-progreso-lectura [libro]="detalle.libro" />
+          @if (detalle.libro.terminadoEn) { <p class="fecha-fin">Terminado el {{ detalle.libro.terminadoEn | date:'d MMM y' }}</p> }
+          <div class="acciones-lectura">
+            @if (pendientes.avances()[detalle.libro.id]) { <ion-button (click)="avanceAbierto.set(true)" [disabled]="api.copia.bloqueada() || api.sincronizando() || ocupado() || consulta.cargando() || !!consulta.error()">Reintentar avance pendiente</ion-button> }
+            @else if (detalle.libro.estado === 'PENDIENTE') { <ion-button (click)="cambiarEstado('LEYENDO')" [disabled]="api.copia.bloqueada() || api.sincronizando() || ocupado() || consulta.cargando() || !!consulta.error()">Empezar lectura</ion-button> }
+            @else if (detalle.libro.estado === 'PAUSADO') { <ion-button (click)="cambiarEstado('LEYENDO')" [disabled]="api.copia.bloqueada() || api.sincronizando() || ocupado() || consulta.cargando() || !!consulta.error()">Retomar lectura</ion-button> }
+            @else if (detalle.libro.estado === 'TERMINADO') { <ion-button (click)="cambiarEstado('LEYENDO')" [disabled]="api.copia.bloqueada() || api.sincronizando() || ocupado() || consulta.cargando() || !!consulta.error()">Reabrir lectura</ion-button> }
+            @else { <ion-button (click)="avanceAbierto.set(true)" [disabled]="api.copia.bloqueada() || api.sincronizando() || ocupado() || consulta.cargando() || !!consulta.error()">Registrar avance</ion-button>
+              <ion-button fill="outline" (click)="cambiarEstado('PAUSADO')" [disabled]="api.copia.bloqueada() || api.sincronizando() || ocupado() || consulta.cargando() || !!consulta.error()">Pausar</ion-button> }
+            @if (detalle.libro.estado !== 'TERMINADO' && !pendientes.avances()[detalle.libro.id]) { <ion-button fill="clear" (click)="cambiarEstado('TERMINADO')" [disabled]="api.copia.bloqueada() || api.sincronizando() || ocupado() || consulta.cargando() || !!consulta.error()">Marcar terminado</ion-button> }
+          </div>
+          <div class="acciones-secundarias"><ion-button fill="clear" (click)="abrirEdicion()" [disabled]="api.copia.bloqueada() || api.sincronizando() || ocupado() || consulta.cargando() || !!consulta.error()">Editar datos</ion-button><ion-button fill="clear" class="accion-eliminar" (click)="eliminar()" [disabled]="api.copia.bloqueada() || api.sincronizando() || ocupado() || consulta.cargando() || !!consulta.error()">Eliminar libro</ion-button></div>
+        </div>
+      </section>
+      @if (consulta.cargando()) { <p class="ayuda-campo" role="status">Actualizando el libro…</p> }
+      <nivi-contexto-lectura [detalle]="detalle" />
+      @if (!api.copia.modoCopia()) { <section class="historial" aria-labelledby="titulo-historial"><div class="titulo-historial"><h2 id="titulo-historial">Tu recorrido</h2><span>Los pasos que dejaste en esta historia.</span></div>
+        @if (historial.cargando()) { <nivi-estado-vista tipo="carga" titulo="Consultando tus avances" descripcion="Estamos recuperando el historial." /> }
+        @else if (historial.error(); as error) { <nivi-estado-vista tipo="error" titulo="No pudimos cargar el historial" [descripcion]="error.mensaje" (reintentar)="cargarHistorial()" /> }
+        @else if (historial.datos(); as pagina) {
+          @if (!pagina.elementos.length) { <p class="sin-historial">Todavía no hay avances registrados. Cuando empieces a leer, guardá tu primera página.</p> }
+          @else {
+            <ol class="registros">@for (registro of pagina.elementos; track registro.id) {
+              <li><div class="registro-cabecera"><strong>Página {{ registro.paginaActual }}</strong><time [attr.datetime]="registro.creadoEn">{{ registro.creadoEn | date:'d MMM y, HH:mm' }}</time></div>
+                <p class="registro-posicion">{{ registro.paginaActual < registro.paginaAnterior ? 'Corrección desde' : 'Desde' }} la página {{ registro.paginaAnterior }}</p>
+                @if (registro.nota) { <p class="nota-registro">{{ registro.nota }}</p> } @else { <p class="registro-posicion">Sin nota personal.</p> }
+              </li>
+            }</ol>
+            <nivi-paginador [pagina]="pagina.pagina" [totalPaginas]="pagina.totalPaginas" [haySiguiente]="pagina.pagina < pagina.totalPaginas" (cambiar)="cargarHistorial($event)" />
+          }
+        }
+      </section>
+      }
+      @if (api.copia.modoCopia()) { <p class="ayuda-campo">Último registro guardado en esta copia. El historial completo requiere conexión.</p> }
+      <nivi-modal-avance [libro]="detalle.libro" [abierto]="avanceAbierto()" (cerrado)="avanceAbierto.set(false)" (guardado)="avanceGuardado($event)" />
+      <ion-modal #editorModal [isOpen]="edicionAbierta()" [canDismiss]="puedeCerrarEdicion" (didDismiss)="edicionAbierta.set(false)" aria-label="Editar datos del libro">
+        <ng-template><ion-header class="ion-no-border"><ion-toolbar><ion-title>Editar datos</ion-title><ion-buttons slot="end"><ion-button [disabled]="ocupado()" (click)="editorModal.dismiss()">Cerrar</ion-button></ion-buttons></ion-toolbar></ion-header>
+          <ion-content><section class="editor-metadatos">
+            <h2>Tu ejemplar, con tus datos.</h2><p class="ayuda-campo">Estos cambios se guardan en tu biblioteca y no modifican el catálogo externo.</p>
+            @if (errorEdicion(); as error) { <p class="error-operacion" role="alert">{{ error.mensaje }}</p> }
+            @if (esperandoEdicion()) { <p class="aviso-sesion">Estamos recuperando el libro antes de permitir otro envío. Tus datos se conservan.</p><ion-button fill="clear" (click)="cargar()">Volver a consultar</ion-button> }
+            @if (avisoEdicion()) { <p class="aviso-sesion" role="status">{{ avisoEdicion() }} En el servidor: {{ detalle.libro.titulo }}, página {{ detalle.libro.paginaActual }}.</p> }
+            @if (datosEdicion(); as datos) { <nivi-formulario-libro #editorFormulario [datos]="datos" [ocupado]="api.copia.bloqueada() || ocupado() || esperandoEdicion()" [erroresServidor]="errorEdicion()?.campos || {}" textoBoton="Guardar cambios" (confirmar)="guardarEdicion($event)" /> }
+          </section></ion-content>
+        </ng-template>
+      </ion-modal>
+    } @else if (consulta.cargando()) { <nivi-estado-vista tipo="carga" titulo="Abriendo tu historia" descripcion="Estamos recuperando el libro y el último punto de lectura." /> }
+  </main>
+</ion-content>
+<nivi-celebracion-lectura [titulo]="libroCelebrado()" (cerrada)="libroCelebrado.set(null)" />

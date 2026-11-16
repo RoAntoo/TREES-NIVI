@@ -1,0 +1,66 @@
+# Ejemplos para un cliente REST. Sustituir valores localmente; no guardar secretos.
+@base = http://localhost:8080/api/v1
+@token = REEMPLAZAR_LOCALMENTE
+@libroId = REEMPLAZAR_CON_UUID
+
+### Acceder
+POST {{base}}/acceso
+Content-Type: application/json
+
+{"usuario":"TU_USUARIO","contrasena":"TU_CONTRASENA"}
+
+### Alta manual. Reutilizar UUID y cuerpo al reintentar.
+POST {{base}}/libros
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"idOperacion":"9425c038-255b-4db0-a4e6-3af4a334f26a","origen":"MANUAL","metadatos":{"titulo":"Libro de demo","autores":[],"totalPaginas":100}}
+
+### Biblioteca
+GET {{base}}/libros?pagina=1&tamano=20
+Authorization: Bearer {{token}}
+
+### Detalle y último registro
+GET {{base}}/libros/{{libroId}}
+Authorization: Bearer {{token}}
+
+### Empezar lectura
+PUT {{base}}/libros/{{libroId}}/estado
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"versionLibro":0,"estado":"LEYENDO"}
+
+### Registrar avance; nueva versión del libro en la respuesta
+POST {{base}}/libros/{{libroId}}/registros
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"idOperacion":"7cbd090c-712a-4b70-a73f-cf45764c6115","versionLibro":1,"paginaActual":35,"nota":"Contexto de ejemplo."}
+
+### Historial
+GET {{base}}/libros/{{libroId}}/registros?pagina=1&tamano=20
+Authorization: Bearer {{token}}
+
+### Reemplazar metadatos; campos opcionales omitidos se limpian
+PUT {{base}}/libros/{{libroId}}/metadatos
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"versionLibro":2,"metadatos":{"titulo":"Título corregido","autores":[],"totalPaginas":100}}
+
+### Resumen
+GET {{base}}/resumen
+Authorization: Bearer {{token}}
+
+### Catálogo (consulta real al proveedor al ejecutar este ejemplo)
+GET {{base}}/catalogo/busqueda?q=Roald%20Dahl&pagina=1&tamano=20
+Authorization: Bearer {{token}}
+
+### Identificar edición por ISBN
+GET {{base}}/catalogo/isbn/9780140328721
+Authorization: Bearer {{token}}
+
+### Eliminar; usar la versión actual del detalle
+DELETE {{base}}/libros/{{libroId}}?version=3
+Authorization: Bearer {{token}}

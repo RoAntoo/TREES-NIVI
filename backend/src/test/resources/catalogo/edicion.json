@@ -1,0 +1,8 @@
+{
+  "key": "/books/OL123M",
+  "title": "Una edición de prueba",
+  "number_of_pages": 120,
+  "authors": [{"key": "/authors/OL123A"}],
+  "works": [{"key": "/works/OL123W"}],
+  "covers": [-1, 12345]
+}

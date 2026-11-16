@@ -1,0 +1,7 @@
+{
+  "/api/**": {
+    "target": "https://nivi-backend-h0b3ercua7g7aacj.brazilsouth-01.azurewebsites.net",
+    "secure": true,
+    "changeOrigin": true
+  }
+}

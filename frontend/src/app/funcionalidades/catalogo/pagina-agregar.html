@@ -1,0 +1,95 @@
+<ion-header class="ion-no-border"><ion-toolbar><ion-title>Agregar</ion-title></ion-toolbar></ion-header>
+<ion-content><main class="pagina agregar"><nivi-aviso-copia />
+  <div class="encabezado-pagina"><span class="ceja">UNA NUEVA HISTORIA</span><h1>Tu próxima lectura empieza acá.</h1><p>Buscá tu libro o sumalo con los datos que tenés a mano.</p></div>
+    @if (guardado()) { <p class="aviso-sesion" role="status">{{ guardado() }}</p> }
+    @if (datosFormulario(); as datos) {
+      <section class="confirmacion-libro">
+        <div class="encabezado-formulario"><div><span class="ceja">ANTES DE GUARDAR</span><h2>Revisá tu edición.</h2></div>
+          <ion-button fill="clear" [disabled]="guardando() || !!pendientes.alta()" (click)="cancelarSeleccion()">Volver</ion-button>
+        </div>
+        <p class="ayuda-confirmacion">Confirmá el título, autores y páginas de tu ejemplar. Los datos que falten pueden quedar vacíos.</p>
+        @if (datos.idObraExterna && !datos.idEdicionExterna) { <p class="aviso-sesion">Este resultado corresponde a una obra, sin una edición concreta. Podés completar el ISBN y las páginas de tu ejemplar.</p> }
+        @if (origen() === 'OPEN_LIBRARY') { <p class="fuente">Metadatos de <a href="https://openlibrary.org" target="_blank" rel="noopener noreferrer">Open Library</a>, editables para tu biblioteca.</p> }
+        @if (obraSeleccionada()?.idObraExterna) {
+          <details class="selector-ediciones" [open]="!datos.idEdicionExterna">
+            <summary>{{ datos.idEdicionExterna ? 'Cambiar la edición seleccionada' : 'Elegir la edición de mi ejemplar' }}</summary>
+            <p class="fuente">Compará idioma, editorial, fecha e ISBN con tu libro. La cantidad de páginas corresponde a la edición que elijas. También podés cerrar esta lista y completar los datos a mano.</p>
+            @if (edicionesObra.cargando()) { <p role="status">Consultando las ediciones de este libro…</p> }
+            @else if (edicionesObra.error(); as error) {
+              <p class="error-operacion" role="alert">{{ error.mensaje }} Podés completar el formulario manualmente.</p>
+              <ion-button fill="clear" (click)="cargarEdiciones()">Reintentar ediciones</ion-button>
+            } @else if (edicionesObra.datos(); as ediciones) {
+              @for (edicion of ediciones.elementos; track edicion.libro.idEdicionExterna) {
+                <article class="opcion-edicion"><h3>{{ edicion.libro.titulo }}</h3>
+                  <p>{{ edicion.idiomas.length ? edicion.idiomas.map(nombreIdioma).join(', ') : 'Idioma sin informar' }} · {{ edicion.editorial || 'Editorial sin informar' }} · {{ edicion.publicacion || 'Fecha sin informar' }}</p>
+                  <p>{{ edicion.libro.isbn ? 'ISBN ' + edicion.libro.isbn : 'ISBN sin informar' }} · {{ edicion.libro.totalPaginas === null ? 'Páginas sin informar' : edicion.libro.totalPaginas + ' páginas' }}</p>
+                  <ion-button fill="outline" [disabled]="guardando() || !!pendientes.alta()" (click)="usarEdicion(edicion.libro)">{{ datos.idEdicionExterna === edicion.libro.idEdicionExterna ? 'Volver a consultar esta edición' : 'Usar esta edición' }}</ion-button>
+                </article>
+              } @empty { <p>No hay ediciones disponibles en esta página. Podés completar los datos a mano.</p> }
+              <nivi-paginador [pagina]="ediciones.pagina" [haySiguiente]="ediciones.haySiguiente" (cambiar)="cargarEdiciones($event)" />
+            }
+          </details>
+        }
+        @if (detalleEdicion.cargando()) { <p class="aviso-sesion" role="status">Completando los datos de la edición. Podés seguir escribiendo: conservaremos tus cambios manuales.</p> }
+        @else if (detalleEdicion.error(); as error) {
+          <p class="error-operacion" role="alert">No pudimos completar esa edición. {{ error.mensaje }} Los datos que escribiste se conservan.</p>
+          <ion-button fill="clear" (click)="reintentarEdicion()">Reintentar datos de edición</ion-button>
+        } @else if (detalleEdicion.datos()) { <p class="fuente" role="status">Edición consultada. Conservamos los campos que editaste; revisá que coincidan con tu ejemplar.</p> }
+        @if (datos.idEdicionExterna && !obraSeleccionada() && (!datos.autores.length || datos.totalPaginas === null)) {
+          <ion-button fill="clear" [disabled]="detalleEdicion.cargando() || guardando() || !!pendientes.alta()" (click)="completarSeleccion()">Volver a consultar los datos faltantes</ion-button>
+        }
+        @if (errorGuardado(); as error) { <p class="error-operacion" role="alert">{{ error.mensaje }}</p> }
+        @if (duplicado(); as libro) {
+          <p class="aviso-sesion" role="status">Ya tenés esta edición: {{ libro.titulo }}.</p>
+          <ion-button [routerLink]="['/app/biblioteca', libro.id]">Ver libro guardado</ion-button>
+        } @else if (errorGuardado()?.codigo === 'EDICION_DUPLICADA') {
+          <ion-button fill="outline" [disabled]="buscandoDuplicado()" (click)="buscarDuplicado()">{{ buscandoDuplicado() ? 'Buscando en tu biblioteca…' : 'Buscar edición guardada' }}</ion-button>
+        }
+        @if (pendientes.alta() && !guardando()) { <p class="aviso-sesion" role="status">No se confirmó el resultado del guardado. Reintentá la misma operación para recuperar la respuesta sin crear otro libro.</p> }
+        <nivi-formulario-libro [datos]="datos" [ocupado]="biblioteca.copia.bloqueada() || biblioteca.sincronizando() || guardando()" [actualizando]="detalleEdicion.cargando()" [bloqueado]="!!pendientes.alta()" [erroresServidor]="errorGuardado()?.campos || {}" (confirmar)="guardar($event)" />
+      </section>
+    } @else if (biblioteca.copia.bloqueada()) { <p class="aviso-copia">Agregar libros requiere conexión. Tu biblioteca guardada sigue disponible.</p> } @else {
+      <section class="escanear-libro" aria-labelledby="titulo-escanear">
+        <h2 id="titulo-escanear">Del papel a tu biblioteca.</h2>
+        @if (escaner.disponible) {
+          <p>Escaneá el código de barras ISBN. Después vas a poder revisar la edición antes de guardarla.</p>
+          <ion-button [disabled]="escaner.ocupado() || consulta.cargando()" (click)="escanear()">{{ escaner.ocupado() ? 'Cámara abierta…' : 'Escanear ISBN' }}</ion-button>
+        } @else { <p>La cámara está disponible en la app Android. Acá podés escribir el ISBN, buscar por título o autor, o agregarlo manualmente.</p> }
+        @if (avisoEscaneo()) { <p class="aviso-sesion" role="status">{{ avisoEscaneo() }}</p> }
+      </section>
+      <ion-segment [disabled]="escaner.ocupado()" [value]="modo()" (ionChange)="cambiarModo($event)" aria-label="Cómo agregar un libro">
+        <ion-segment-button value="busqueda"><ion-label>Buscar</ion-label></ion-segment-button>
+        <ion-segment-button value="isbn"><ion-label>ISBN</ion-label></ion-segment-button>
+        <ion-segment-button value="manual"><ion-label>Manual</ion-label></ion-segment-button>
+      </ion-segment>
+      @if (modo() === 'busqueda') {
+        <form class="busqueda-catalogo" [formGroup]="formularioBusqueda" (ngSubmit)="buscar()" novalidate>
+          <ion-input label="Título o autor" labelPlacement="stacked" fill="outline" formControlName="q" placeholder="¿Qué historia estás buscando?" aria-describedby="error-busqueda" />
+          <ion-button type="submit">Buscar libros</ion-button>
+        </form>
+        @if (formularioBusqueda.controls.q.touched && formularioBusqueda.invalid) { <p id="error-busqueda" class="error-campo">Ingresá un título o autor, de hasta 200 caracteres.</p> }
+      } @else if (modo() === 'isbn') {
+        <form class="busqueda-catalogo" [formGroup]="formularioIsbn" (ngSubmit)="identificar()" novalidate>
+          <ion-input label="ISBN del libro" labelPlacement="stacked" fill="outline" formControlName="isbn" placeholder="Por ejemplo, 9780140328721" aria-describedby="error-isbn-busqueda" />
+          <ion-button type="submit">Consultar ISBN</ion-button>
+        </form>
+        @if (formularioIsbn.controls.isbn.touched && formularioIsbn.invalid) { <p id="error-isbn-busqueda" class="error-campo">Ingresá un ISBN-10 o ISBN-13 válido. Puede tener guiones y espacios.</p> }
+        <p class="fuente">Buscalo junto al código de barras de tu libro. Podés escribirlo con guiones o espacios.</p>
+      }
+      @if (consulta.cargando()) { <nivi-estado-vista tipo="carga" titulo="Buscando una nueva historia" descripcion="Estamos consultando Open Library a través de tu servidor." /> }
+      @else if (consulta.error(); as error) {
+        <nivi-estado-vista tipo="error" [titulo]="error.estado === 404 ? 'No encontramos esa edición' : 'El catálogo no pudo responder'" [descripcion]="error.mensaje" (reintentar)="modo() === 'isbn' ? identificar() : buscar()" />
+        <ion-button fill="outline" (click)="modo.set('manual'); seleccion.set(datosVacios()); origen.set('MANUAL')">Cargar el libro manualmente</ion-button>
+      } @else if (consulta.datos(); as resultados) {
+        @if (!resultados.elementos.length) { <nivi-estado-vista titulo="No encontramos coincidencias" descripcion="Probá otro título o autor, o cargá los datos del libro manualmente." /> }
+        @else {
+          <div class="resultados-catalogo">@for (candidato of resultados.elementos; track $index) {
+            <article class="resultado-catalogo"><nivi-portada [titulo]="candidato.titulo" [url]="candidato.urlPortada" /><div><h2>{{ candidato.titulo }}</h2><p>{{ candidato.autores.join(', ') || 'Autor sin informar' }}</p>
+              <p class="fuente">{{ candidato.isbn ? 'ISBN ' + candidato.isbn : 'Obra · edición por confirmar' }}</p><ion-button fill="outline" (click)="elegir(candidato)">Revisar este libro</ion-button></div></article>
+          }</div>
+          @if (modo() === 'busqueda') { <nivi-paginador [pagina]="resultados.pagina" [haySiguiente]="resultados.haySiguiente" (cambiar)="buscar($event)" /> }
+        }
+        <p class="fuente">Resultados de <a href="https://openlibrary.org" target="_blank" rel="noopener noreferrer">Open Library</a>. Un catálogo abierto puede tener datos incompletos.</p>
+      } @else { <nivi-estado-vista icono="search-outline" titulo="Encontrá tu próxima lectura" descripcion="Buscá por título o autor, consultá un ISBN o elegí Manual para empezar sin catálogo." /> }
+    }
+</main></ion-content>
