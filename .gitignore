@@ -23,3 +23,6 @@
 backend/datos/
 .idea/
 *.iml
+
+# Fuentes propias de Android: conservarlas en Git, aunque android generado se excluya.
+!frontend/nativo/android/
